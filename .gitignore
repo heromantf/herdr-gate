@@ -1,0 +1,11 @@
+# Built programs: make them with `go run build.go`.
+/mods/herdr-gate/bin/
+/dist/
+/herdr-gate
+/herdr-gate.exe
+/herdr-gate-*
+*.test
+
+# Written by herdr-app into a mod's folder, for editors.
+/mods/herdr-gate/gpui-kit.d.ts
+/mods/herdr-gate/jsconfig.json

@@ -1,0 +1,2 @@
+# The same line endings on every system: gofmt wants LF.
+* text=auto eol=lf
