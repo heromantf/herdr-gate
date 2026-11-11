@@ -367,6 +367,7 @@ func (g *gate) run(ctx context.Context, channel ssh.Channel, command, remote str
 	g.logf(T("%s runs: %s", "%s 执行: %s"), remote, short(command))
 	cmd := shellCommand(ctx, command)
 	cmd.Dir = g.home
+	cmd.Env = commandEnvironment()
 	cmd.Stdout = channel
 	cmd.Stderr = channel.Stderr()
 	// Bounds the wait for output once the command is gone, in case something
@@ -398,6 +399,28 @@ func (g *gate) run(ctx context.Context, channel ssh.Channel, command, remote str
 	}
 	g.logf(T("%s finished: exit code %d", "%s 结束: 退出码 %d"), remote, code)
 	finish(channel, code)
+}
+
+// commandEnvironment is the gate's own environment without the herdr terminal
+// the gate may run in. hc reads HC_TERMINAL_ID as "I am in this terminal": a
+// command that kept it and started a terminal with hc would have it made a
+// child of the gate's, which ends when the gate does.
+//
+// HC_SCOPE stays. It is the mark by which hc, when the gate's terminal is
+// lost in a crash, finds and ends what was started from it: the commands
+// here too, which no hangup reaches in their own sessions. hc takes the mark
+// off a core it starts itself, so one started through the gate is not ended.
+func commandEnvironment() []string {
+	all := os.Environ()
+	kept := make([]string, 0, len(all)) // never nil, which would mean "the gate's own"
+	for _, entry := range all {
+		// Windows does not tell the letter cases of a name apart.
+		if name, _, _ := strings.Cut(entry, "="); strings.EqualFold(name, "HC_TERMINAL_ID") {
+			continue
+		}
+		kept = append(kept, entry)
+	}
+	return kept
 }
 
 // finish reports the exit code and closes the channel.

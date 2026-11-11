@@ -349,6 +349,28 @@ func TestCommandEndsWhenTheClientLeaves(t *testing.T) {
 	tg.waitFor(t, "finished: exit code", 8*time.Second)
 }
 
+// A gate started in a herdr terminal is told which terminal that is. A
+// device's command is not in it: one that started a terminal with hc would
+// find it made a child of the gate's, ending when the gate does.
+func TestCommandsAreNotInTheGatesHerdrTerminal(t *testing.T) {
+	t.Setenv("HC_TERMINAL_ID", "t99")
+	t.Setenv("HERDR_GATE_TEST_KEPT", "kept")
+	tg := startGate(t)
+	client := tg.approved(t)
+
+	line := `echo "[$HC_TERMINAL_ID] [$HERDR_GATE_TEST_KEPT]"`
+	if runtime.GOOS == "windows" {
+		line = `echo [%HC_TERMINAL_ID%] [%HERDR_GATE_TEST_KEPT%]`
+	}
+	got := runCommand(t, client, line, "")
+	if strings.Contains(got.stdout, "t99") {
+		t.Fatalf("the command was told it runs in the gate's terminal: %+v", got)
+	}
+	if !strings.Contains(got.stdout, "[kept]") {
+		t.Fatalf("the rest of the gate's environment did not reach the command: %+v", got)
+	}
+}
+
 // The exact bytes herdr-core's own encoder writes for such a report
 // (herdr-core src/status.rs, `encode`), so its parser reads ours.
 func TestStatusSequencesAreWhatHerdrParses(t *testing.T) {
