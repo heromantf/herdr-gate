@@ -141,14 +141,27 @@ function platform() {
   return appWindow()?.platform ?? (typeof process !== "undefined" ? process.platform : "linux");
 }
 
-/** The gate program for this computer, beside this mod. */
+// Whether the gate program has been made runnable since Herdr started.
+let runnable = false;
+
+/**
+ * The gate program for this computer, beside this mod, ready to run. A copy
+ * from another system arrives without its executable bit, and on macOS
+ * possibly quarantined, so both are put right before its first use.
+ */
 async function gatePath() {
   const os = { windows: "windows", macos: "darwin", linux: "linux" }[platform()];
   let machine = typeof process !== "undefined" ? process.arch : "";
   if (!machine && os !== "windows") machine = (await exec("uname", ["-m"]).catch(() => null))?.stdout.trim() ?? "";
   const arch = /arm64|aarch64/.test(machine) ? "arm64" : "amd64";
   const path = `${appHome()}/mods/${NAME}/bin/${NAME}-${os}-${arch}`;
-  return os === "windows" ? `${path}.exe`.replace(/\//g, "\\") : path;
+  if (os === "windows") return `${path}.exe`.replace(/\//g, "\\");
+  if (!runnable) {
+    await exec("chmod", ["+x", path]).catch(() => null);
+    if (os === "darwin") await exec("xattr", ["-d", "com.apple.quarantine", path]).catch(() => null);
+    runnable = true;
+  }
+  return path;
 }
 
 function failure(result) {
@@ -213,12 +226,6 @@ export async function revokeDevice(device) {
  */
 export async function startGate() {
   const path = await gatePath();
-  if (platform() !== "windows") {
-    // A copy from another system arrives without its executable bit, and on
-    // macOS possibly quarantined.
-    await exec("chmod", ["+x", path]).catch(() => null);
-    if (platform() === "macos") await exec("xattr", ["-d", "com.apple.quarantine", path]).catch(() => null);
-  }
   // --no-parent: it belongs to nobody's terminal, so it ends with none.
   // No --keep: after a core restart a kept terminal comes back as a shell
   // under the same name, which would pass for a running gate.
