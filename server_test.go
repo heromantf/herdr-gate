@@ -219,6 +219,43 @@ func TestNewDeviceIsAskedOnceThenRemembered(t *testing.T) {
 	}
 }
 
+// An agent in a herdr terminal answers with `hc send`, and hc wraps what an
+// agent sends in a tag naming the sender. The answer is what the tag holds.
+func TestAnswerWrappedByHcIsTheAnswerInside(t *testing.T) {
+	tg := startGate(t)
+
+	key := newDeviceKey(t)
+	tg.answerNext(`<hc from="t7">y</hc>`)
+	client, err := tg.dial(key)
+	if err != nil {
+		t.Fatalf("a yes sent by an agent was not taken as one: %v\n%s", err, tg.out.String())
+	}
+	client.Close()
+
+	tg.answerNext(`<hc from="t7 lead" reach="hc send t7 when done">n</hc>`)
+	if client, err := tg.dial(newDeviceKey(t)); err == nil {
+		client.Close()
+		t.Fatal("a no sent by an agent let the device in")
+	}
+
+	for line, want := range map[string]string{
+		"y":                               "y",
+		"  Yes ":                          "yes",
+		`<hc from="t7">y</hc>`:            "y",
+		`<hc from="t7"> YES </hc>`:        "yes",
+		`<hc from="a>b" reach="x">是</hc>`: "是",
+		`<hc>y</hc>`:                      "y",
+		// Not what hc writes: taken as typed, which is not a yes.
+		`<hc from="t7">y`:       `<hc from="t7">y`,
+		`<b>y</b>`:              `<b>y</b>`,
+		`<hcx from="t7">y</hc>`: `<hcx from="t7">y</hc>`,
+	} {
+		if got := answerIn(line); got != want {
+			t.Errorf("answerIn(%q) = %q, want %q", line, got, want)
+		}
+	}
+}
+
 func TestRefusedDeviceIsNotAskedAgain(t *testing.T) {
 	tg := startGate(t)
 	key := newDeviceKey(t)

@@ -9,6 +9,7 @@ import (
 	"net"
 	"os"
 	"path/filepath"
+	"regexp"
 	"strings"
 	"sync"
 	"time"
@@ -73,6 +74,21 @@ func setAutoApprove(dir string, on bool) error {
 	return os.WriteFile(path, []byte("on\n"), 0o600)
 }
 
+// What hc puts around the text an agent sends from its own herdr terminal:
+// <hc from="t7">y</hc>, with more attributes at times.
+var hcTag = regexp.MustCompile(`^<hc(?:\s+[\w-]+="[^"]*")*\s*>(.*)</hc>$`)
+
+// answerIn is the answer in a line typed into the gate's window, in lower
+// case: the line itself, or what hc wrapped when an agent sent it with
+// `hc send`.
+func answerIn(line string) string {
+	text := strings.TrimSpace(line)
+	if wrapped := hcTag.FindStringSubmatch(text); wrapped != nil {
+		text = strings.TrimSpace(wrapped[1])
+	}
+	return strings.ToLower(text)
+}
+
 // turnedAway reports whether the person said no to this key since the gate
 // started. That no stands, whatever else would let the device in.
 func (a *approver) turnedAway(key ssh.PublicKey) bool {
@@ -128,7 +144,7 @@ func (a *approver) approve(remote string, key ssh.PublicKey, devices *deviceList
 			fmt.Fprintln(a.out, T("\n  Nobody is here to answer: refused.", "\n  没有人能回答，已拒绝。"))
 			return false
 		}
-		switch strings.ToLower(strings.TrimSpace(answer)) {
+		switch answerIn(answer) {
 		case "y", "yes", "是":
 			note := fmt.Sprintf("herdr-gate %s from=%s", time.Now().Format("2006-01-02"), from)
 			if err := devices.add(key, note); err != nil {
