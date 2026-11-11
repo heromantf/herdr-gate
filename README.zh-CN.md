@@ -59,6 +59,13 @@ herdr-gate -auto-approve on    # 关闭用 off
 用户名必须是运行 herdr-gate 的这个系统账号，不分大小写；启动信息和 `-info` 里都会显示它。
 用别的用户名登录会被直接拒绝，不会询问。
 
+手机 app 等待登录的时间比 herdr-gate 的询问短（1.0.5 版约 30 秒）。手机先提示登录超时也没关系：
+窗口里的询问还在，批准之后在手机上再连一次就行，不会再问。
+
+手机提示要手动添加公钥时，不要用它给的那条命令：那条命令写的是 `~/.ssh/authorized_keys`，
+herdr-gate 不读这个文件。在 herdr-gate 的窗口或面板里批准这台手机；它被拒绝过的话，
+把手机显示的公钥作为一行加进 herdr-gate 自己的 `authorized_keys`（见"文件"一节）。
+
 ## 在 herdr 的终端里运行
 
 也可以在这台机器的 herdr-app 里开一个终端标签，在里面运行 herdr-gate。关掉 app 窗口后
@@ -97,6 +104,10 @@ mod 启动的 herdr-gate 不占标签页，在后台运行：herdr-app 里关掉
 
 安装：先运行 `go run build.go`，它会把程序编译到 mod 的 `bin/` 里，再把
 `mods/herdr-gate/` 复制到 `~/.config/herdr-app/mods/herdr-gate/`。
+
+更新：先停止 herdr-gate，并先删掉旧的 `~/.config/herdr-app/mods/herdr-gate/`，再复制新的。
+在 Apple 芯片的 Mac 上，直接覆盖正在运行的程序，新程序一启动就会被系统结束，
+要删掉文件重新复制才能恢复。
 
 - 面板：`herdr-app do mod.open --name herdr-gate`。
 - 状态栏按钮：在自己的布局里加一个块。通知、自动启动和在线台数都依赖它。

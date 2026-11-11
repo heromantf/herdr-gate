@@ -70,6 +70,16 @@ to run commands on this machine.
 The user name must be the system account herdr-gate runs as, in any letter case. The
 startup lines and `-info` show it. A login under another name is refused without asking.
 
+The phone app waits for its login a shorter time than herdr-gate waits for your answer
+(about 30 seconds in version 1.0.5). If the phone says the sign-in timed out first, the
+question is still in the window: approve it, then connect from the phone once more. It
+is not asked again.
+
+When the phone tells you to add its public key by hand, do not use the command it
+offers: that one writes `~/.ssh/authorized_keys`, which herdr-gate does not read.
+Approve the phone in herdr-gate's window or panel; if it was refused before, add the
+public key the phone shows as one line to herdr-gate's own `authorized_keys` (see Files).
+
 ## Run it in a herdr terminal
 
 You can also open a terminal tab in herdr-app on that machine and run herdr-gate there.
@@ -112,6 +122,11 @@ and says when one waits for approval.
 
 Install: run `go run build.go`, which puts the programs in the mod's `bin/`, then copy
 `mods/herdr-gate/` to `~/.config/herdr-app/mods/herdr-gate/`.
+
+To update: stop herdr-gate first, and delete the old `~/.config/herdr-app/mods/herdr-gate/`
+before copying the new one. On a Mac with Apple silicon, a program copied over the one
+that is running is ended by the system the moment it starts, and stays that way until
+the file is deleted and copied again.
 
 - The panel: `herdr-app do mod.open --name herdr-gate`.
 - The status-bar button: add a block to a layout of your own. Notifications, the switch
