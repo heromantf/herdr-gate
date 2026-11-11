@@ -178,13 +178,26 @@ export async function gateInfo() {
   info.addresses = info.addresses ?? [];
   // Those of the addresses that Tailscale itself says are its own.
   info.tailscale = info.tailscale ?? [];
+  // Whether the person's own Tailscale devices are approved without the question.
+  info.autoApprove = info.autoApprove === true;
   info.connections = info.connections ?? [];
   info.devices = (info.devices ?? []).map((d) => ({
     ...d,
     from: /from=(\S+)/.exec(d.note)?.[1]?.replace(/:\d+$/, "") ?? "",
     date: /\b(\d{4}-\d{2}-\d{2})\b/.exec(d.note)?.[1] ?? "",
+    // Its name in Tailscale, for a device that was approved without the question.
+    name: /tailscale=(\S+)/.exec(d.note)?.[1] ?? "",
   }));
   return info;
+}
+
+/**
+ * Switches on or off that new devices signed in to Tailscale with this
+ * computer's own account are approved without the question. The gate keeps
+ * the switch itself (`-info` tells it), and a running one follows at once.
+ */
+export async function setAutoApprove(on) {
+  await ask([...languageArgs(), "-auto-approve", on ? "on" : "off"]);
 }
 
 /** Takes a device off the list. A running gate drops its connection within seconds. */

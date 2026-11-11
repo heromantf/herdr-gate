@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"io"
 	"net"
+	"net/netip"
 	"os"
 	"sort"
 	"strings"
@@ -43,6 +44,14 @@ type gate struct {
 	// `-info` and so for a control panel. Empty: nowhere.
 	statePath string
 	publishMu sync.Mutex
+
+	// The gate's own folder, where the switch for approving the person's own
+	// Tailscale devices without the question lies (see autoApproveOn).
+	dir string
+	// Asks Tailscale whether a connection comes from one of the person's own
+	// devices. Nil: ownTailscaleDevice.
+	ownDevice func(local, remote string) (name string, own bool)
+	ownMu     sync.Mutex
 
 	serving sync.WaitGroup // the connections being served, for whoever must wait them out
 }
@@ -114,13 +123,15 @@ func (g *gate) config(hostKey ssh.Signer) *ssh.ServerConfig {
 				g.refuseUser(conn)
 				return nil, errors.New("not this machine's account")
 			}
-			if !g.devices.has(key) && g.approver.refused(key) {
+			// With the switch on, a key nobody can be asked about may still
+			// turn out to be one of the person's own devices (below).
+			if !g.devices.has(key) && g.approver.refused(key) && !autoApproveOn(g.dir) {
 				return nil, errors.New("device not approved")
 			}
 			return &ssh.Permissions{Extensions: map[string]string{"fingerprint": ssh.FingerprintSHA256(key), "key": keyText(key)}}, nil
 		},
 		VerifiedPublicKeyCallback: func(conn ssh.ConnMetadata, key ssh.PublicKey, perms *ssh.Permissions, _ string) (*ssh.Permissions, error) {
-			if g.devices.has(key) || g.approver.approve(conn.RemoteAddr().String(), key, g.devices) {
+			if g.devices.has(key) || g.approvedAsOwn(conn, key) || g.approver.approve(conn.RemoteAddr().String(), key, g.devices) {
 				return perms, nil
 			}
 			return nil, errors.New("device not approved")
@@ -128,6 +139,51 @@ func (g *gate) config(hostKey ssh.Signer) *ssh.ServerConfig {
 	}
 	cfg.AddHostKey(hostKey)
 	return cfg
+}
+
+// approvedAsOwn lets a new device in without the question, and adds it to
+// the list, when the person switched that on and Tailscale says the device is
+// signed in with this machine's own account. The device has already proved it
+// holds the key. Anything else is left to the question.
+func (g *gate) approvedAsOwn(conn ssh.ConnMetadata, key ssh.PublicKey) bool {
+	if !autoApproveOn(g.dir) || g.approver.turnedAway(key) {
+		return false
+	}
+	local, remote := hostOf(conn.LocalAddr()), hostOf(conn.RemoteAddr())
+	own := g.ownDevice
+	if own == nil {
+		own = ownTailscaleDevice
+	}
+	name, ok := own(local, remote)
+	if !ok {
+		return false
+	}
+	// One at a time: a device that opens two connections is listed once.
+	g.ownMu.Lock()
+	defer g.ownMu.Unlock()
+	if g.devices.has(key) {
+		return true
+	}
+	note := fmt.Sprintf("herdr-gate %s from=%s tailscale=%s", time.Now().Format("2006-01-02"), remote, plainName(name))
+	if err := g.devices.add(key, note); err != nil {
+		g.logf(T("cannot write the device list: %v", "无法写入设备名单: %v"), err)
+		return false
+	}
+	g.logf(T("%s approved without asking: %s is one of your Tailscale devices (fingerprint %s)", "%s 已自动批准：%s 是你的 Tailscale 设备（指纹 %s）"), remote, plainName(name), ssh.FingerprintSHA256(key))
+	return true
+}
+
+// hostOf is an address without its port, and an IPv4 address as one even
+// when the system reports it inside an IPv6 one.
+func hostOf(addr net.Addr) string {
+	host := addr.String()
+	if h, _, err := net.SplitHostPort(host); err == nil {
+		host = h
+	}
+	if ip, err := netip.ParseAddr(host); err == nil {
+		return ip.Unmap().String()
+	}
+	return host
 }
 
 func (g *gate) serve(l net.Listener, hostKey ssh.Signer) error {

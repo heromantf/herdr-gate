@@ -2,9 +2,13 @@ package main
 
 import (
 	"bufio"
+	"errors"
 	"fmt"
 	"io"
+	"io/fs"
 	"net"
+	"os"
+	"path/filepath"
 	"strings"
 	"sync"
 	"time"
@@ -38,6 +42,43 @@ func newApprover(in io.Reader, out io.Writer, status *statusReporter) *approver 
 		}
 	}()
 	return &approver{answers: answers, out: out, timeout: 60 * time.Second, rejected: map[string]bool{}, status: status}
+}
+
+// The switch for letting in, without the question, new devices that are
+// signed in to Tailscale with this machine's own account (see
+// approvedAsOwn). It is on while this file is in the gate's folder:
+// `-auto-approve on` puts it there and `off` takes it away. A running gate
+// looks each time a new device arrives, so the switch works at once.
+const autoApproveFile = "auto_approve_tailscale"
+
+func autoApproveOn(dir string) bool {
+	if dir == "" {
+		return false
+	}
+	_, err := os.Stat(filepath.Join(dir, autoApproveFile))
+	return err == nil
+}
+
+func setAutoApprove(dir string, on bool) error {
+	path := filepath.Join(dir, autoApproveFile)
+	if !on {
+		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
+			return err
+		}
+		return nil
+	}
+	if err := os.MkdirAll(dir, 0o700); err != nil {
+		return err
+	}
+	return os.WriteFile(path, []byte("on\n"), 0o600)
+}
+
+// turnedAway reports whether the person said no to this key since the gate
+// started. That no stands, whatever else would let the device in.
+func (a *approver) turnedAway(key ssh.PublicKey) bool {
+	a.mu.Lock()
+	defer a.mu.Unlock()
+	return a.rejected[ssh.FingerprintSHA256(key)]
 }
 
 // refused reports whether asking about this key is pointless: it was refused

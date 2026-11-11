@@ -36,8 +36,28 @@ The first time a device connects, the window shows where it connects from and it
 fingerprint, and asks. Type `y` and Enter to approve. Enter alone refuses; a refused
 device is not asked about again until herdr-gate restarts.
 
-Devices on your Tailscale network connect from addresses between `100.64.0.0` and
-`100.127.255.255`.
+### Your own Tailscale devices, without asking
+
+herdr-gate can approve a new device without the question when Tailscale says it is
+signed in with the same account as this machine. This is off until you switch it on, in
+the mod's panel or with:
+
+```sh
+herdr-gate -auto-approve on    # or off
+```
+
+A running herdr-gate follows the switch at once. For each new device it asks the
+`tailscale` command about both ends of the connection: it has to arrive on this
+machine's own Tailscale address, from a device of the same account. Everything else is
+still asked about: other people's devices on your tailnet, tagged devices, and whatever
+reaches you through another device's routes. A device you refused stays refused until
+herdr-gate restarts.
+
+A device approved this way is on the list like any other, with its name in Tailscale,
+and is revoked the same way.
+
+With the switch on, signing a device in to your Tailscale account is all it takes for it
+to run commands on this machine.
 
 ## Connect from another device
 
@@ -82,6 +102,7 @@ The panel shows:
 - this machine's fingerprint;
 - the port, which you can change;
 - a switch to start the gate whenever Herdr opens;
+- a switch to approve your own Tailscale devices without asking;
 - the language;
 - the approved devices, whether each is connected now, and Revoke;
 - the gate's log, read-only.
@@ -122,6 +143,8 @@ In `~/.config/herdr-gate/` (change it with `-dir` or `HERDR_GATE_HOME`):
   makes a new one; every client then has to accept the new fingerprint.
 - `connections.json`: who is connected now, rewritten by a running gate each time a
   device connects or goes.
+- `auto_approve_tailscale`: there while your own Tailscale devices are approved without
+  asking. Deleting it switches that off.
 
 ## Ask and revoke
 

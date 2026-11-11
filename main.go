@@ -30,6 +30,7 @@ func main() {
 	dirFlag := flag.String("dir", "", T("folder for this machine's key and the device list (default ~/.config/herdr-gate)", "存放本机指纹密钥和设备名单的文件夹（默认 ~/.config/herdr-gate）"))
 	info := flag.Bool("info", false, T("print this machine's addresses, fingerprint, approved devices and current connections as JSON, then exit", "输出本机地址、指纹、已批准的设备和当前连接（JSON），然后退出"))
 	revoke := flag.String("revoke", "", T("revoke an approved device, named by its fingerprint or public key, then exit", "撤销一台已批准的设备（给出它的指纹或公钥），然后退出"))
+	auto := flag.String("auto-approve", "", T("on or off: whether new devices signed in to Tailscale with this machine's own account are let in without asking; then exit", "on 或 off：和本机登录同一个 Tailscale 账号的新设备是否不询问直接放行；然后退出"))
 	showVersion := flag.Bool("version", false, T("print the version", "显示版本"))
 	flag.Parse()
 	if *lang != "" && *lang != "en" && *lang != "zh" {
@@ -40,13 +41,17 @@ func main() {
 		fmt.Println("herdr-gate", version)
 		return
 	}
-	if err := run(*listen, *dirFlag, *info, *revoke); err != nil {
+	if *auto != "" && *auto != "on" && *auto != "off" {
+		fmt.Fprintf(os.Stderr, T("herdr-gate: -auto-approve takes on or off, not %q\n", "herdr-gate: -auto-approve 只接受 on 或 off，不是 %q\n"), *auto)
+		os.Exit(2)
+	}
+	if err := run(*listen, *dirFlag, *info, *revoke, *auto); err != nil {
 		fmt.Fprintln(os.Stderr, "herdr-gate:", err)
 		os.Exit(1)
 	}
 }
 
-func run(listen, dir string, info bool, revoke string) error {
+func run(listen, dir string, info bool, revoke, auto string) error {
 	home, err := os.UserHomeDir()
 	if err != nil {
 		return fmt.Errorf(T("cannot find the home folder: %w", "找不到用户主目录: %w"), err)
@@ -72,6 +77,17 @@ func run(listen, dir string, info bool, revoke string) error {
 		fmt.Println(T("Revoked. A running herdr-gate closes its connections within seconds.", "已撤销。正在运行的 herdr-gate 会在几秒内断开它的连接。"))
 		return nil
 	}
+	if auto != "" {
+		if err := setAutoApprove(dir, auto == "on"); err != nil {
+			return fmt.Errorf(T("cannot save the setting: %w", "无法保存设置: %w"), err)
+		}
+		if auto == "on" {
+			fmt.Println(T("On. New devices signed in to Tailscale with this machine's account are let in without asking.", "已开启。和本机登录同一个 Tailscale 账号的新设备不再询问，直接放行。"))
+		} else {
+			fmt.Println(T("Off. Every new device is asked about.", "已关闭。每台新设备都会询问。"))
+		}
+		return nil
+	}
 
 	if err := os.MkdirAll(dir, 0o700); err != nil {
 		return err
@@ -94,6 +110,7 @@ func run(listen, dir string, info bool, revoke string) error {
 		user:     currentUser(),
 
 		statePath: filepath.Join(dir, connectionsFile),
+		dir:       dir,
 	}
 	fmt.Printf("herdr-gate %s\n", version)
 	fmt.Printf(T("Listening:   %s\n", "监听:     %s\n"), l.Addr())
@@ -105,6 +122,9 @@ func run(listen, dir string, info bool, revoke string) error {
 	}
 	fmt.Printf(T("Fingerprint: %s (%s)\n", "本机指纹: %s (%s)\n"), ssh.FingerprintSHA256(hostKey.PublicKey()), hostKey.PublicKey().Type())
 	fmt.Printf(T("Devices:     %s (%d approved)\n", "设备名单: %s（已批准 %d 台）\n"), devices.path, devices.count())
+	if autoApproveOn(dir) {
+		fmt.Println(T("Your own Tailscale devices are approved without asking (-auto-approve off turns that off).", "你自己的 Tailscale 设备会自动批准（-auto-approve off 可关闭）。"))
+	}
 	if status != nil {
 		fmt.Println(T("Running in a herdr terminal: herdr is told when a new device waits for approval.", "正在 herdr 的终端里运行：有新设备等待批准时会通知 herdr。"))
 	}

@@ -1,1 +1,9 @@
-<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><path d="M6 21V5a2 2 0 0 1 2-2h8a2 2 0 0 1 2 2v16"/><path d="M3 21h18"/><circle cx="14.5" cy="12.5" r="1"/></svg>
+<svg xmlns="http://www.w3.org/2000/svg" width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round">
+  <!-- An arched gate with two leaves: the opening tinted, then the arch, the ground, the seam between the leaves, and a handle on each. -->
+  <path d="M4 21V11a8 8 0 0 1 16 0v10z" fill="currentColor" fill-opacity=".16" stroke="none"/>
+  <path d="M4 21V11a8 8 0 0 1 16 0v10"/>
+  <path d="M2 21h20"/>
+  <path d="M12 3v18"/>
+  <path d="M9 13.5v.01"/>
+  <path d="M15 13.5v.01"/>
+</svg>

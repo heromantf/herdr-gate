@@ -9,7 +9,7 @@ import { theme, props, closeOverlay, settings, watchFolder } from "herdr";
 import {
   NAME, ICON, DEFAULT_PORT, tr, textFont, gateTerminal, pending, gateInfo, gateLog, revokeDevice, startGate, stopGate, answer,
   autostart, setAutostart, port, setPort, parsePort, runningPort,
-  language, languageChoice, setLanguageChoice, runningLanguage, chineseFont,
+  language, languageChoice, setLanguageChoice, runningLanguage, chineseFont, setAutoApprove,
 } from "./gate.js";
 
 // Herdr's own close glyph, shipped with every install.
@@ -294,7 +294,9 @@ export default class Panel {
   device(t, d, i, connections) {
     const live = connections.filter((c) => c.key === d.key);
     // Connected: where it connects from now. Otherwise: where it was approved from.
-    const what = live[0]?.from || d.from || d.note || d.type;
+    const where = live[0]?.from || d.from || d.note || d.type;
+    // One that was approved without the question goes by its name in Tailscale.
+    const what = d.name ? `${d.name} · ${where}` : where;
     const state = !live.length ? tr("offline", "离线") : live.length > 1 ? tr(`online · ${live.length} connections`, `在线 · ${live.length} 个连接`) : tr("online", "在线");
     const row = h_flex()
       .id(`hg-device-${i}`)
@@ -413,7 +415,10 @@ export default class Panel {
     const online = new Set(connections.map((c) => c.key)).size;
     const state = !gate ? tr("Not running", "未运行") : waiting ? tr("A device is waiting for approval", "有设备等待批准") : online ? tr(`Running · ${online} ${online === 1 ? "device" : "devices"} online`, `运行中 · ${online} 台设备在线`) : tr("Running", "运行中");
     const dot = !gate ? t.dim : waiting ? t.blocked : t.ansi2;
-    const working = { start: tr("Starting…", "正在启动…"), stop: tr("Stopping…", "正在停止…"), restart: tr("Restarting…", "正在重新启动…"), answer: tr("Answering…", "正在回答…"), revoke: tr("Revoking…", "正在撤销…") }[this.busy];
+    const working = { start: tr("Starting…", "正在启动…"), stop: tr("Stopping…", "正在停止…"), restart: tr("Restarting…", "正在重新启动…"), answer: tr("Answering…", "正在回答…"), revoke: tr("Revoking…", "正在撤销…"), save: tr("Saving…", "正在保存…") }[this.busy];
+    const auto = this.info?.autoApprove === true;
+    // Without Tailscale on this computer the switch has nothing to go by.
+    const noTailscale = Boolean(this.info) && !this.info.tailscale.length;
     const devices = this.info?.devices ?? [];
     const badPort = parsePort(this.typedPort) === null;
     const restart = (_e, cx) =>
@@ -489,6 +494,14 @@ export default class Panel {
       .when(Boolean(this.info?.fingerprint), (el) => el.child(div().px(8).pt(4).text_size(12).line_height("18px").text_color(t.dim).child(tr(`Fingerprint ${this.info.fingerprint}`, `本机指纹 ${this.info.fingerprint}`))))
       .child(this.setting(t, tr("Port", "端口"), badPort ? tr("1 to 65535", "范围 1–65535") : tr("Takes effect after a restart", "修改后需重新启动"), portBox))
       .child(this.setting(t, tr("Start with Herdr", "随 Herdr 自动启动"), "", this.toggle(t, "hg-autostart", starts, () => setAutostart(!starts))))
+      .child(
+        this.setting(
+          t,
+          tr("Auto-approve my Tailscale devices", "自动批准我的 Tailscale 设备"),
+          noTailscale ? tr("Tailscale is not connected on this computer", "这台电脑没有连上 Tailscale") : tr("Devices on the same Tailscale account connect without being asked about", "同一个 Tailscale 账号下的设备不再询问"),
+          this.toggle(t, "hg-auto-approve", auto, (_e, cx) => this.act(cx, "save", () => setAutoApprove(!auto))),
+        ),
+      )
       .child(this.setting(t, tr("Language", "语言"), behind ? tr("The log and approval questions follow after a restart", "日志和批准提示重新启动后切换") : "", languageBox))
       .child(this.heading(t, tr(`Approved devices (${devices.length})`, `已批准的设备（${devices.length}）`)))
       .child(

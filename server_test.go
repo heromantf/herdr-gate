@@ -43,6 +43,7 @@ type testGate struct {
 	devices  *deviceList
 	approver *approver
 	dir      string
+	gate     *gate
 }
 
 // startGate runs a gate on a loopback port with its own scratch folder. What
@@ -74,7 +75,11 @@ func startGate(t *testing.T) *testGate {
 		revokeEvery: 50 * time.Millisecond,
 		statePath:   filepath.Join(dir, connectionsFile),
 		home:        home,
+		dir:         dir,
+		// No test asks the real Tailscale: one that needs an answer gives its own.
+		ownDevice: func(string, string) (string, bool) { return "", false },
 	}
+	tg.gate = g
 	l, err := net.Listen("tcp", "127.0.0.1:0")
 	if err != nil {
 		t.Fatal(err)

@@ -17,12 +17,15 @@ import (
 type gateInfo struct {
 	Version string `json:"version"`
 	// The language the gate speaks here, "en" or "zh", for a panel to speak too.
-	Lang        string       `json:"lang"`
-	User        string       `json:"user"`        // the account commands run as
-	Addresses   []string     `json:"addresses"`   // this machine's IPv4 addresses, Tailscale's first
-	Tailscale   []string     `json:"tailscale"`   // those of them Tailscale says are its own
-	Fingerprint string       `json:"fingerprint"` // of this machine; empty before the first start
-	Dir         string       `json:"dir"`
+	Lang        string   `json:"lang"`
+	User        string   `json:"user"`        // the account commands run as
+	Addresses   []string `json:"addresses"`   // this machine's IPv4 addresses, Tailscale's first
+	Tailscale   []string `json:"tailscale"`   // those of them Tailscale says are its own
+	Fingerprint string   `json:"fingerprint"` // of this machine; empty before the first start
+	Dir         string   `json:"dir"`
+	// Whether new devices signed in to Tailscale with this machine's own
+	// account are let in without the question.
+	AutoApprove bool         `json:"autoApprove"`
 	Devices     []deviceInfo `json:"devices"`
 	// Who was connected when the gate last wrote it down. True while a gate
 	// runs; one that was cut short leaves its last list behind, so a reader
@@ -42,7 +45,7 @@ type deviceInfo struct {
 
 func printInfo(dir string, out io.Writer) error {
 	addresses, tailscale := localAddresses()
-	info := gateInfo{Version: version, Lang: language, User: currentUser(), Addresses: addresses, Tailscale: tailscale, Dir: dir, Devices: []deviceInfo{}, Connections: []connectionInfo{}}
+	info := gateInfo{Version: version, Lang: language, User: currentUser(), Addresses: addresses, Tailscale: tailscale, Dir: dir, AutoApprove: autoApproveOn(dir), Devices: []deviceInfo{}, Connections: []connectionInfo{}}
 	if data, err := os.ReadFile(filepath.Join(dir, connectionsFile)); err == nil {
 		var state struct {
 			Connections []connectionInfo `json:"connections"`
