@@ -130,5 +130,6 @@ func run(listen, dir string, info bool, revoke, auto string) error {
 	}
 	fmt.Println(T("A new device is asked about here the first time it connects. Ctrl+C stops.", "新设备第一次连接时会在这里询问。按 Ctrl+C 停止。"))
 	fmt.Println()
+	g.endCommandsWhenStopped()
 	return g.serve(l, hostKey)
 }

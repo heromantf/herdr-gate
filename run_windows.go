@@ -30,6 +30,10 @@ func shellCommand(ctx context.Context, line string) *exec.Cmd {
 	return cmd
 }
 
+// endCommandsWhenStopped has nothing to do here: what happens to the commands
+// in progress when the gate is stopped is left as Windows has it.
+func (g *gate) endCommandsWhenStopped() {}
+
 // withoutWindow keeps a helper program from opening a console window of its
 // own when the gate has none to share with it (as when the mod asks -info).
 func withoutWindow(cmd *exec.Cmd) {

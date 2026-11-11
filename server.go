@@ -9,6 +9,7 @@ import (
 	"net"
 	"net/netip"
 	"os"
+	"os/exec"
 	"sort"
 	"strings"
 	"sync"
@@ -53,7 +54,36 @@ type gate struct {
 	ownDevice func(local, remote string) (name string, own bool)
 	ownMu     sync.Mutex
 
+	// The commands in progress, for a gate that is stopped to end them rather
+	// than leave them behind (see endCommandsWhenStopped).
+	commandsMu sync.Mutex
+	commands   map[*exec.Cmd]bool
+	stopping   bool // no command starts any more
+
 	serving sync.WaitGroup // the connections being served, for whoever must wait them out
+}
+
+// start starts a command and keeps it among those in progress until forget.
+func (g *gate) start(cmd *exec.Cmd) error {
+	g.commandsMu.Lock()
+	defer g.commandsMu.Unlock()
+	if g.stopping {
+		return errors.New("herdr-gate is stopping")
+	}
+	if err := cmd.Start(); err != nil {
+		return err
+	}
+	if g.commands == nil {
+		g.commands = map[*exec.Cmd]bool{}
+	}
+	g.commands[cmd] = true
+	return nil
+}
+
+func (g *gate) forget(cmd *exec.Cmd) {
+	g.commandsMu.Lock()
+	defer g.commandsMu.Unlock()
+	delete(g.commands, cmd)
 }
 
 // connectionInfo is one device connected right now.
@@ -344,7 +374,7 @@ func (g *gate) run(ctx context.Context, channel ssh.Channel, command, remote str
 	cmd.WaitDelay = 3 * time.Second
 	stdin, err := cmd.StdinPipe()
 	if err == nil {
-		err = cmd.Start()
+		err = g.start(cmd)
 	}
 	if err != nil {
 		if ctx.Err() != nil {
@@ -356,6 +386,7 @@ func (g *gate) run(ctx context.Context, channel ssh.Channel, command, remote str
 		finish(channel, 126)
 		return
 	}
+	defer g.forget(cmd)
 	go func() {
 		_, _ = io.Copy(stdin, channel)
 		_ = stdin.Close()
