@@ -1,28 +1,26 @@
 # herdr-gate
 
-A panel and a status-bar button for herdr-gate, a small SSH server you run on your own
-machine so that herdr's desktop app and phone app can reach it without the system's
-sshd. From the panel you start and stop the gate, see what other devices type to connect,
-approve a device that knocks, and revoke one you approved before. The button shows at a
-glance whether the gate runs, how many devices are connected, and when one is waiting.
+A panel and a status-bar button for herdr-gate, a small SSH server that lets Herdr's
+desktop and phone apps reach this machine without the system's sshd. In the panel you
+start and stop it, see what to type on the other device, approve a device that knocks and
+revoke one later. The button shows whether it runs, how many devices are connected, and
+when one is waiting.
 
 ![herdr-gate](preview.png)
 
-The mod is the control surface only. The server is the `herdr-gate` program, whose source
-is in the same repository (Go). The mod runs it, and never listens on the network itself.
+## Before you add it
 
-Before adding it, the person should know that this mod:
+The mod is only the controls. The server is the `herdr-gate` program (Go, in the same
+repository), which the mod runs.
 
-- runs programs: `hc`, the `herdr-gate` program, and on a download `curl` and the
-  system's command for moving a file; on macOS and Linux also `chmod`, `uname`, and on
-  macOS `xattr`; on a download `scutil` on macOS and `reg` on Windows, to read the
-  system's proxy setting;
-- reaches the network only when Download is clicked, to fetch the program from the
-  repository's newest GitHub release, on macOS and Windows through the proxy the system
-  is set to use when the environment names none;
-- reads `~/.config/herdr-gate/connections.json`;
-- starts an SSH server on this machine when Start is clicked: a device approved there can
-  run any command as the person.
+- **It starts an SSH server** when you click Start, and each time Herdr opens once Start
+  with Herdr is on. A device you approve there can run any command as you.
+- **It reaches the network** only when you click Download: for the program, from this
+  repository's newest GitHub release, through the system's proxy when one is set.
+- **It runs programs**: `hc`, `herdr-gate`, `curl`, the system's shell (`sh`, `cmd`),
+  `chmod`, `uname`, `xattr`, `scutil`, `reg` and `defaults`. What each is for is under
+  Built from.
+- **It reads** `~/.config/herdr-gate/connections.json`.
 
 ## What you see
 
@@ -38,14 +36,16 @@ Before adding it, the person should know that this mod:
   buttons, Allow (filled) and Deny.
 - Buttons (30 high, radius 7): Stop and View log while it runs, Start (filled) otherwise.
   Beside them, small muted text while a click is being carried out.
-- "Connect with": one row (30 high) for each of this machine's addresses, as
-  `user@address:port`, a dim "Tailscale" after the one Tailscale gave it, and Copy at the
-  right. Under them the machine's fingerprint, small and dim.
-- Settings, title left and control right: Port (a 76-wide input, red border while it is
-  not a port), Start with Herdr (a switch), Auto-approve my Tailscale devices (a switch,
-  with a line under the title), Language (three choices side by side: System, English,
-  中文; the chosen one filled with the accent color). Last, a row about the gate program
-  itself: "Program", its version at the right, and under them the path it lies at, dim.
+- "Connect with": one row (30 high) for each of this machine's addresses, four at most,
+  as `user@address:port`, a dim "Tailscale" after the one Tailscale gave it, and Copy at
+  the right. Under them the machine's fingerprint, small and dim.
+- Settings, title left and control right: Port (a 76-wide input, its border in the
+  blocked color while what is typed is not a port, with a line under the title), Start
+  with Herdr (a switch), Auto-approve my Tailscale devices (a switch, with a line under
+  the title, which says so when Tailscale gave this machine no address), Language (three
+  choices side by side: System, English, 中文; the chosen one filled with the accent
+  color). Last, a row about the gate program itself: "Program", its version at the right,
+  and under them the path it lies at, dim.
 - "Approved devices (n)": rows (30 high) with a 6px dot, the device (its Tailscale name
   when it was approved automatically, and where it connects from), online or offline, the
   first ten characters of its fingerprint, and Revoke. Revoke asks once more in a row
@@ -61,8 +61,9 @@ that the program for this computer is not here yet, that Download gets the newes
 release's, a filled Download button, and a dim line naming the file and the folder to put
 one into by hand.
 
-**The status-bar button** (a block in a layout's status bar, text 11.8): the gate icon
-(14) at the right edge of its block. Dim when the gate is stopped, green while it runs,
+**The status-bar button** (a block in a layout's status bar, drawn like Herdr's own: the
+chrome color under a 1px top border, text 11.8): the gate icon (14) at the right edge of
+its block. Dim when the gate is stopped, green while it runs,
 followed by "n online" while devices are connected; in the blocked color and blinking,
 followed by "Approval needed", while one waits. The block is 34px wide for the icon
 alone, 100 with a count, 150 with the sentence.
@@ -75,6 +76,7 @@ alone, 100 with a count, 150 with the sentence.
   "blocked", and the report's title and message are what the card shows. Allow and Deny
   answer in that terminal. The button notices too, and posts a toast (once for each new
   device) that opens the panel when clicked, with the "needs you" sound if sounds are on.
+- Clicking the button opens the panel.
 - Copy puts the row's text on the clipboard and reads "Copied".
 - Port: typing a valid number stores it; it is used at the next start. While the gate
   runs on another port, a Restart link appears beside the input.
@@ -91,9 +93,10 @@ alone, 100 with a count, 150 with the sentence.
   the panel then becomes the ordinary one. A program put into `bin/` by hand does the same.
   While it downloads, small muted text beside the button says how far it is and how fast:
   "Downloading… 48% · 2.6 MB of 5.3 MB · 2.6 MB/s", read once a second.
-  A dim line under the button asks to keep the panel open until it is done.
+  A dim line under the button asks to keep the panel open until it is done. When it
+  fails, what curl said shows there in the blocked color.
 - The panel reads the gate's state again when the gate's folder changes, and every five
-  seconds; the button counts connections the same way.
+  seconds; the button counts connections when that folder changes, and every fifteen.
 
 ## Built from
 
@@ -115,6 +118,14 @@ alone, 100 with a count, 150 with the sentence.
   `-auto-approve on|off`. It lies in the mod's `bin/` as `herdr-gate-<os>-<arch>`
   (`.exe` on Windows), built there by the repository's `build.go`, downloaded from
   `releases/latest/download/`, or put there by hand.
+- System programs, each run with `exec`: `uname -m` when the script is not told the
+  machine's kind; `chmod +x` and, on macOS, `xattr -d com.apple.quarantine` on the
+  program before its first use; for a download `curl --fail --location --show-error
+  [--proxy …] --output <part> <address>`, then `sh -c 'mkdir -p … && mv -f …'` or
+  `cmd /d /c mkdir … & move /y …`; for the proxy `scutil --proxy`, or `cmd /d /c set`
+  and `reg query` of the Internet Settings; for the language without a program
+  `defaults read -g AppleLanguages`, `reg query` of the display languages, or the locale
+  variables through `sh`.
 - The close glyph is Herdr's own, `mods/workspace-chrome/x.svg`.
 
 ## Watch out
@@ -139,8 +150,8 @@ alone, 100 with a count, 150 with the sentence.
   Settings in the registry on Windows, and hands curl what it finds (`--proxy`).
 - The download belongs to the open panel. Closing the panel leaves curl running to its
   end, or to the ten minutes Herdr lets a program run, but nothing then puts the file in
-  place: what came stays beside the mods as `herdr-gate-download.part` until the next
-  download.
+  place: what came stays beside the mods as `herdr-gate-download.part`, with
+  `herdr-gate-download.progress`, until the next download.
 - A file's bytes do not survive a trip through the script: `createHash` gives the sum of
   nothing for what `readFile` returned, and writing those bytes back makes another file.
   The program is downloaded and moved by system tools.
@@ -151,8 +162,12 @@ alone, 100 with a count, 150 with the sentence.
   is told how wide the longest line draws, since a script cannot measure text.
 - `window()` is null during `herdr-app check`, which draws one frame and runs none of the
   panel's later work: it proves the mod loads, not that it works.
-- The mod learns which language the system speaks by asking the gate program, so it is
-  English until that answers.
+- The mod learns which language the system speaks by asking the gate program (`-info`),
+  so it is English until that answers. With no program to ask, the panel asks the system
+  itself, the way the program would.
+- While Chinese is shown the whole mod is set in the first of Microsoft YaHei UI,
+  PingFang SC, Noto Sans SC, Noto Sans CJK SC and Source Han Sans SC the system has:
+  Herdr's own font leaves Chinese to whatever the system falls back on.
 - On Windows the program cannot be replaced while the gate runs. On a Mac with Apple
   silicon a program copied over a running one is ended by the system when it next starts.
 - It assumes `hc` is installed, and that the person adds the button to a layout of their
@@ -160,7 +175,8 @@ alone, 100 with a count, 150 with the sentence.
 
 ## Done when
 
-- With no program present, the panel offers Download; after it, the ordinary panel shows.
+- With no program present, the panel offers Download; while it runs the line beside the
+  button counts up, with the speed; after it, the ordinary panel shows.
 - Start turns the dot green and lists the addresses; Stop turns it dim; closing the
   panel, a tab or the window leaves a running gate running.
 - A new device that connects makes the button blink "Approval needed" and a toast appear;
