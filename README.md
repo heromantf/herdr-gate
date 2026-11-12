@@ -202,4 +202,5 @@ publishes them as that release.
 
 ## License
 
-[MIT](LICENSE)
+[MIT](LICENSE). The programs also contain Go's runtime and libraries, under their own
+license: see [THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES).

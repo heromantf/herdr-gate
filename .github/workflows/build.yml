@@ -84,4 +84,5 @@ jobs:
       - name: Publish
         env:
           GH_TOKEN: ${{ github.token }}
-        run: gh release create "$GITHUB_REF_NAME" programs/* --verify-tag --title "herdr-gate ${GITHUB_REF_NAME#v}" --generate-notes
+        # The notices go with the programs: they contain Go's runtime and libraries.
+        run: gh release create "$GITHUB_REF_NAME" programs/* THIRD-PARTY-NOTICES --verify-tag --title "herdr-gate ${GITHUB_REF_NAME#v}" --generate-notes

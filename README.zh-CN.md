@@ -173,4 +173,5 @@ macOS、Windows 上跑测试、编译程序，然后把它们发布到这个版�
 
 ## 许可证
 
-[MIT](LICENSE)
+[MIT](LICENSE)。程序里还包含 Go 的运行库和几个库，它们有自己的许可：见
+[THIRD-PARTY-NOTICES](THIRD-PARTY-NOTICES)。
