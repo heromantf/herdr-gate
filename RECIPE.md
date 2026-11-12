@@ -90,6 +90,7 @@ alone, 100 with a count, 150 with the sentence.
   the panel then becomes the ordinary one. A program put into `bin/` by hand does the same.
   While it downloads, small muted text beside the button says how far it is and how fast:
   "Downloading… 48% · 2.6 MB of 5.3 MB · 2.6 MB/s", read once a second.
+  A dim line under the button asks to keep the panel open until it is done.
 - The panel reads the gate's state again when the gate's folder changes, and every five
   seconds; the button counts connections the same way.
 

@@ -489,6 +489,8 @@ export default class Panel {
           .child(this.button(t, "hg-download", tr("Download", "下载"), (_e, cx) => this.act(cx, "download", () => downloadGate()), true))
           .when(this.busy === "download", (el) => el.child(div().text_size(12).text_color(t.muted).child(this.downloading()))),
       )
+      // Closing the panel abandons the download: nothing would put the file in place.
+      .when(this.busy === "download", (el) => el.child(div().pt(8).text_size(12).line_height("18px").text_color(t.dim).child(tr("Keep this panel open until the download is done.", "下载完成前请不要关闭这个面板。"))))
       .when(Boolean(this.error), (el) => el.child(div().pt(8).text_size(12).line_height("18px").text_color(t.blocked).child(String(this.error))))
       // One from elsewhere is as good: built from the source, or fetched by hand.
       .when(Boolean(program), (el) =>
