@@ -1,14 +1,25 @@
 name: build
 
-# Tests the gate and builds it for every system. A tag v<version> also
-# publishes the programs as that version's release, which is where a copy of
-# the mod without a program downloads its own from.
+# Tests the gate and builds it for every system, when a push changed the Go
+# source: the mod's files and the documents are not built. A tag v<version>
+# always runs, and also publishes the programs as that version's release,
+# which is where a copy of the mod without a program downloads its own from.
 
 on:
   push:
     branches: [main]
-    tags: ["v*"]
+    tags: ["v*"] # paths are not looked at for a tag
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/build.yml"
   pull_request:
+    paths:
+      - "**.go"
+      - "go.mod"
+      - "go.sum"
+      - ".github/workflows/build.yml"
   workflow_dispatch:
 
 permissions:
