@@ -1,4 +1,4 @@
-# herdr-gate
+# Herdr Gate
 
 [English](README.md)
 

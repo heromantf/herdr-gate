@@ -1,4 +1,4 @@
-# herdr-gate
+# Herdr Gate
 
 A panel and a status-bar button for herdr-gate, a small SSH server that lets Herdr's
 desktop and phone apps reach this machine without the system's sshd. In the panel you
