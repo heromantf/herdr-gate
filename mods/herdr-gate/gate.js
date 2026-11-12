@@ -263,16 +263,22 @@ export async function downloadGate() {
  */
 export async function fetchTo(url, dir, path, os) {
   const part = local(`${appHome()}/${NAME}-download.part`);
+  const meter = meterPath();
   try {
+    // What an earlier download left behind says nothing about this one.
+    await fs.unlink(meter).catch(() => null);
     let got;
     try {
       // curl comes with Windows, macOS and nearly every Linux; fetch() here returns text only.
-      got = await exec("curl", ["--fail", "--location", "--silent", "--show-error", "--output", part, url], { timeout: 300000 });
+      // Its progress meter, and whatever else it has to say, go to a file the panel reads meanwhile.
+      // Ten minutes is the longest Herdr lets a program run.
+      got = await exec("curl", ["--fail", "--location", "--show-error", "--stderr", meter, ...(await proxyArgs(os)), "--output", part, url], { timeout: 600000 });
     } catch (e) {
-      throw new Error(tr(`curl could not be run: ${e?.message ?? e}`, `无法运行 curl：${e?.message ?? e}`));
+      throw new Error(tr(`curl could not be run, or took more than ten minutes: ${e?.message ?? e}`, `无法运行 curl，或者用时超过十分钟：${e?.message ?? e}`));
     }
     if (got.code !== 0) {
-      const why = (got.stderr || got.stdout || `curl ${got.code}`).trim();
+      const said = (await readTextFile(meter).catch(() => null)) ?? "";
+      const why = said.split(/[\r\n]+/).filter((line) => line.startsWith("curl:")).pop() ?? `curl ${got.code}`;
       throw new Error(tr(`Download failed: ${why}`, `下载失败：${why}`));
     }
     const moved =
@@ -285,7 +291,63 @@ export async function fetchTo(url, dir, path, os) {
     }
   } finally {
     await fs.unlink(part).catch(() => null);
+    await fs.unlink(meter).catch(() => null);
   }
+}
+
+/** Where curl writes how a download is going. Outside the mod's folder, like
+ *  the download itself: a change inside it starts the mod afresh. */
+function meterPath() {
+  return local(`${appHome()}/${NAME}-download.progress`);
+}
+
+/** A number of bytes as curl's meter writes it: `51587`, `5477k`, `1330k`, `2.1M`. */
+function meterBytes(text) {
+  const m = /^(\d+(?:\.\d+)?)([kMGT]?)$/.exec(text);
+  return m ? Number(m[1]) * 1024 ** ["", "k", "M", "G", "T"].indexOf(m[2]) : 0;
+}
+
+/** A number of bytes for showing: `812 KB`, `5.3 MB`. */
+function showBytes(n) {
+  return n >= 1024 * 1024 ? `${(n / 1024 / 1024).toFixed(1)} MB` : `${Math.round(n / 1024)} KB`;
+}
+
+/**
+ * How far a running download is, from curl's own meter: the percentage, how
+ * much has come and of how much, and the speed just now. Null while nothing
+ * has come yet, and when no download runs.
+ */
+export async function downloadProgress() {
+  const said = (await readTextFile(meterPath()).catch(() => null)) ?? "";
+  // curl writes one line over and over; the file keeps every state of it.
+  const last = said
+    .split(/[\r\n]+/)
+    .map((line) => line.trim().split(/\s+/))
+    .filter((words) => words.length === 12 && /^\d+$/.test(words[0]))
+    .pop();
+  const total = last ? meterBytes(last[1]) : 0;
+  if (!total) return null; // not past the redirects yet
+  return { percent: Number(last[0]), received: showBytes(meterBytes(last[3])), total: showBytes(total), speed: `${showBytes(meterBytes(last[11]))}/s` };
+}
+
+/**
+ * What makes curl go through the proxy this system is set to use, when
+ * nothing in its environment says so already. curl takes a proxy from the
+ * environment, not from the system's settings, and a Herdr opened from the
+ * desktop has no such variables: the download then went out directly, on a
+ * network that needs the proxy. macOS only so far.
+ */
+async function proxyArgs(os) {
+  if (os !== "darwin") return [];
+  const named = await exec("sh", ["-c", 'echo "$https_proxy$HTTPS_PROXY$all_proxy$ALL_PROXY"'], { timeout: 5000 }).catch(() => null);
+  if (!named || named.code !== 0 || named.stdout.trim()) return [];
+  const said = (await exec("scutil", ["--proxy"], { timeout: 5000 }).catch(() => null))?.stdout ?? "";
+  const value = (key) => new RegExp(`^\\s*${key}\\s*:\\s*(\\S+)\\s*$`, "m").exec(said)?.[1];
+  for (const [kind, scheme] of [["HTTPS", "http"], ["SOCKS", "socks5h"]]) {
+    const host = value(`${kind}Proxy`), port = value(`${kind}Port`);
+    if (value(`${kind}Enable`) === "1" && host && port) return ["--proxy", `${scheme}://${host.includes(":") ? `[${host}]` : host}:${port}`];
+  }
+  return [];
 }
 
 function failure(result) {

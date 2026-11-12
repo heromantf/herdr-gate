@@ -126,6 +126,9 @@ program belongs in the mod's `bin/`, and gets there in any of three ways:
 
 - Open the panel. Without a program it says so and offers Download, which fetches this
   system's program from the newest release. Nothing is downloaded before you click.
+  While it downloads, the progress and the speed show beside the button; leave the panel
+  open until it is done. On macOS the download goes through the proxy set in the system's
+  settings when the environment names none.
 - Fetch the program from the release page yourself and put it in `bin/`.
 - Build it: `go run build.go` puts the programs for every system in `bin/` before you
   copy the mod.

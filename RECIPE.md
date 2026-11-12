@@ -15,9 +15,10 @@ Before adding it, the person should know that this mod:
 
 - runs programs: `hc`, the `herdr-gate` program, and on a download `curl` and the
   system's command for moving a file; on macOS and Linux also `chmod`, `uname`, and on
-  macOS `xattr`;
+  macOS `xattr`, and `scutil` on a download;
 - reaches the network only when Download is clicked, to fetch the program from the
-  repository's newest GitHub release;
+  repository's newest GitHub release, on macOS through the proxy the system is set to
+  use when the environment names none;
 - reads `~/.config/herdr-gate/connections.json`;
 - starts an SSH server on this machine when Start is clicked: a device approved there can
   run any command as the person.
@@ -87,6 +88,8 @@ alone, 100 with a count, 150 with the sentence.
   returns; Esc on the main page closes the panel.
 - Download fetches this system's program from the newest release into the mod's `bin/`;
   the panel then becomes the ordinary one. A program put into `bin/` by hand does the same.
+  While it downloads, small muted text beside the button says how far it is and how fast:
+  "Downloading… 48% · 2.6 MB of 5.3 MB · 2.6 MB/s", read once a second.
 - The panel reads the gate's state again when the gate's folder changes, and every five
   seconds; the button counts connections the same way.
 
@@ -122,6 +125,16 @@ alone, 100 with a count, 150 with the sentence.
 - Anything written into the mod's own folder makes Herdr start the mod afresh about a
   tenth of a second later, cutting short whatever it was doing. So a download waits
   outside the mod's folder until it is whole, and one system command then moves it in.
+- A program run with `exec` gives nothing back until it ends. So curl writes its progress
+  meter to a file beside the download (`--stderr`), and the panel reads the last state of
+  the one line curl keeps rewriting there; what curl says when it fails is in that file too.
+- curl takes a proxy from its environment, not from the system's settings, and a Herdr
+  opened from the desktop has no such variables. On macOS the mod then asks
+  `scutil --proxy` and hands curl what it says (`--proxy`). Windows is not covered yet.
+- The download belongs to the open panel. Closing the panel leaves curl running to its
+  end, or to the ten minutes Herdr lets a program run, but nothing then puts the file in
+  place: what came stays beside the mods as `herdr-gate-download.part` until the next
+  download.
 - A file's bytes do not survive a trip through the script: `createHash` gives the sum of
   nothing for what `readFile` returned, and writing those bytes back makes another file.
   The program is downloaded and moved by system tools.

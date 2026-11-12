@@ -10,7 +10,7 @@ import {
   NAME, ICON, DEFAULT_PORT, tr, textFont, gateTerminal, pending, gateInfo, gateLog, revokeDevice, startGate, stopGate, answer,
   autostart, setAutostart, port, setPort, parsePort, runningPort,
   language, languageChoice, setLanguageChoice, runningLanguage, chineseFont, setAutoApprove,
-  programMissing, downloadGate, programInfo, shortPath, learnSystemLanguage,
+  programMissing, downloadGate, downloadProgress, programInfo, shortPath, learnSystemLanguage,
 } from "./gate.js";
 
 // Herdr's own close glyph, shipped with every install.
@@ -56,11 +56,13 @@ export default class Panel {
       cx.notify();
     });
     this.program = null; // what is known about the gate program itself
+    this.progress = null; // how far a download is, while one runs
     this.reload(cx);
     this.loadProgram(cx);
     // The device list changes when someone is approved; the panel is open briefly.
     cx.timer.every(5000, (cx) => this.reload(cx));
     cx.timer.every(2000, (cx) => { if (this.page === "log") this.loadLog(cx); });
+    cx.timer.every(1000, (cx) => { if (this.busy === "download") this.loadProgress(cx); });
   }
 
   /** Turns to the log page, at its newest line, every time. */
@@ -125,6 +127,16 @@ export default class Panel {
     });
   }
 
+  /** Reads how far the download is, for the line beside the button. */
+  loadProgress(cx) {
+    cx.spawn(async (cx) => {
+      const progress = await downloadProgress().catch(() => null);
+      if (this.busy !== "download") return; // it ended meanwhile
+      this.progress = progress;
+      cx.notify();
+    });
+  }
+
   /** Looks at the gate program itself: its file name, and where it lies. */
   loadProgram(cx) {
     cx.spawn(async (cx) => {
@@ -162,6 +174,7 @@ export default class Panel {
         this.error = String(e?.message ?? e);
       }
       this.busy = null;
+      this.progress = null;
       await this.read();
       this.program = await programInfo().catch(() => null);
       cx.notify();
@@ -434,6 +447,14 @@ export default class Panel {
       .when(Boolean(program?.path), (el) => el.child(div().truncate().text_size(12).line_height("18px").text_color(t.dim).child(shortPath(program.path))));
   }
 
+  /** What the line beside the Download button says while it downloads: how
+   *  far it is and how fast, once curl has begun to tell. */
+  downloading() {
+    const p = this.progress;
+    if (!p) return tr("Downloading…", "正在下载…");
+    return tr(`Downloading… ${p.percent}% · ${p.received} of ${p.total} · ${p.speed}`, `正在下载… ${p.percent}% · ${p.received} / ${p.total} · ${p.speed}`);
+  }
+
   /** All there is to show while this copy of the mod has no gate program for
    *  this computer: that, the button that downloads one, and where to put
    *  one by hand. */
@@ -466,7 +487,7 @@ export default class Panel {
           .gap(8)
           .items_center()
           .child(this.button(t, "hg-download", tr("Download", "下载"), (_e, cx) => this.act(cx, "download", () => downloadGate()), true))
-          .when(this.busy === "download", (el) => el.child(div().text_size(12).text_color(t.muted).child(tr("Downloading…", "正在下载…")))),
+          .when(this.busy === "download", (el) => el.child(div().text_size(12).text_color(t.muted).child(this.downloading()))),
       )
       .when(Boolean(this.error), (el) => el.child(div().pt(8).text_size(12).line_height("18px").text_color(t.blocked).child(String(this.error))))
       // One from elsewhere is as good: built from the source, or fetched by hand.
