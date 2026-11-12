@@ -2,6 +2,8 @@
 
 [English](README.md)
 
+![Herdr Gate](preview.png)
+
 一个给自己机器用的小型 SSH 服务。装在要被连的机器上，herdr 的桌面 app 和手机 app
 就能把这台机器当普通 SSH 机器来连，不用开系统的 sshd。
 

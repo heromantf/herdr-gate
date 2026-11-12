@@ -2,6 +2,8 @@
 
 [简体中文](README.zh-CN.md)
 
+![Herdr Gate](preview.png)
+
 A small SSH server for your own machines. Run it on a machine you want to reach, and
 herdr's desktop app and phone app connect to that machine as an ordinary SSH host, without
 turning on the system's sshd.
