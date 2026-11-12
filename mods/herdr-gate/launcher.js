@@ -8,7 +8,7 @@
 import { div, svg } from "gpui-kit";
 import { h_flex } from "gpui-base";
 import { props, theme, run, notify, watchFolder } from "herdr";
-import { NAME, ICON, tr, textFont, gateTerminal, pending, announce, autostart, ready, startGate, gateDir, onlineDevices, gateInfo } from "./gate.js";
+import { NAME, ICON, tr, textFont, gateTerminal, pending, announce, autostart, ready, startGate, gateDir, onlineDevices, gateInfo, programMissing } from "./gate.js";
 
 // Wide enough for either language's words.
 const ICON_ONLY = 34, WITH_COUNT = 100, WITH_TEXT = 150;
@@ -78,6 +78,8 @@ export default class Launcher {
       }
       if (!autostart() || gateTerminal()) return;
       cx.spawn(async () => {
+        // No program yet: the panel offers the download, there is nothing to report.
+        if (await programMissing()) return;
         try {
           await startGate();
         } catch (e) {

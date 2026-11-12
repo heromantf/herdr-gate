@@ -10,6 +10,7 @@ import {
   NAME, ICON, DEFAULT_PORT, tr, textFont, gateTerminal, pending, gateInfo, gateLog, revokeDevice, startGate, stopGate, answer,
   autostart, setAutostart, port, setPort, parsePort, runningPort,
   language, languageChoice, setLanguageChoice, runningLanguage, chineseFont, setAutoApprove,
+  programMissing, downloadGate, programInfo, shortPath, learnSystemLanguage,
 } from "./gate.js";
 
 // Herdr's own close glyph, shipped with every install.
@@ -54,7 +55,9 @@ export default class Panel {
       if (n && n !== port()) setPort(n);
       cx.notify();
     });
+    this.program = null; // what is known about the gate program itself
     this.reload(cx);
+    this.loadProgram(cx);
     // The device list changes when someone is approved; the panel is open briefly.
     cx.timer.every(5000, (cx) => this.reload(cx));
     cx.timer.every(2000, (cx) => { if (this.page === "log") this.loadLog(cx); });
@@ -122,7 +125,23 @@ export default class Panel {
     });
   }
 
+  /** Looks at the gate program itself: its file name, and where it lies. */
+  loadProgram(cx) {
+    cx.spawn(async (cx) => {
+      this.program = await programInfo().catch(() => null);
+      cx.notify();
+    });
+  }
+
   async read() {
+    // A copy of the mod taken from the repository has no gate program yet:
+    // then there is nothing to ask, only the download to offer.
+    this.missing = await programMissing();
+    if (this.missing) {
+      // Nothing to ask which language the system speaks: find out without it.
+      await learnSystemLanguage();
+      return;
+    }
     try {
       this.info = await gateInfo();
     } catch (e) {
@@ -144,6 +163,7 @@ export default class Panel {
       }
       this.busy = null;
       await this.read();
+      this.program = await programInfo().catch(() => null);
       cx.notify();
     });
   }
@@ -397,6 +417,64 @@ export default class Panel {
       );
   }
 
+  /** The gate program in use: its version, and where it lies. */
+  programRow(t) {
+    const program = this.program;
+    const version = this.info?.version;
+    return v_flex()
+      .pt(12)
+      .gap(2)
+      .child(
+        h_flex()
+          .gap(12)
+          .items_center()
+          .child(div().flex_1().min_w(0).text_size(13).text_color(t.foreground).child(tr("Program", "程序")))
+          .child(div().flex_none().text_size(13).text_color(t.foreground).child(version ? `${NAME} ${version}` : NAME)),
+      )
+      .when(Boolean(program?.path), (el) => el.child(div().truncate().text_size(12).line_height("18px").text_color(t.dim).child(shortPath(program.path))));
+  }
+
+  /** All there is to show while this copy of the mod has no gate program for
+   *  this computer: that, the button that downloads one, and where to put
+   *  one by hand. */
+  missingPage(t, font) {
+    const program = this.program;
+    return v_flex()
+      .id("herdr-gate-panel")
+      .track_focus(this.handle)
+      .on_key_down((e, cx) => { if (e.key === "escape") { this.close(); cx.stop_propagation(); } })
+      .w_full()
+      .min_h(0)
+      .p(18)
+      .bg(t.popover)
+      .text_color(t.foreground)
+      .when(Boolean(font), (el) => el.font_family(font))
+      .child(
+        h_flex()
+          .gap(4)
+          .items_center()
+          .child(svg(ICON).size(16).text_color(t.muted))
+          .child(div().pl(4).flex_1().text_size(15).font_weight(600).child(NAME))
+          .child(this.closeButton(t)),
+      )
+      .child(div().pt(6).text_size(13).line_height("20px").text_color(t.muted).child(tr("Lets your other devices reach this computer over SSH.", "让其他设备通过 SSH 连到这台电脑。")))
+      .child(div().pt(14).text_size(13).text_color(t.foreground).child(tr("The herdr-gate program for this computer is not here yet.", "这台电脑上还没有 herdr-gate 程序。")))
+      .child(div().pt(4).text_size(12).line_height("18px").text_color(t.dim).child(tr("Download gets the newest release's from GitHub.", "点下载会从 GitHub 取最新发布的那个。")))
+      .child(
+        h_flex()
+          .pt(14)
+          .gap(8)
+          .items_center()
+          .child(this.button(t, "hg-download", tr("Download", "下载"), (_e, cx) => this.act(cx, "download", () => downloadGate()), true))
+          .when(this.busy === "download", (el) => el.child(div().text_size(12).text_color(t.muted).child(tr("Downloading…", "正在下载…")))),
+      )
+      .when(Boolean(this.error), (el) => el.child(div().pt(8).text_size(12).line_height("18px").text_color(t.blocked).child(String(this.error))))
+      // One from elsewhere is as good: built from the source, or fetched by hand.
+      .when(Boolean(program), (el) =>
+        el.child(div().pt(14).text_size(12).line_height("18px").text_color(t.dim).child(tr(`Or put ${program.file} into ${shortPath(program.bin)} yourself.`, `也可以自己把 ${program.file} 放进 ${shortPath(program.bin)}。`))),
+      );
+  }
+
   closeButton(t) {
     return div().id("hg-close").p(4).flex_none().rounded(5).text_color(t.dim).cursor_pointer().hover((s) => s.bg(t.hover).text_color(t.foreground)).on_click(() => this.close()).child(svg(CLOSE).size(14));
   }
@@ -405,6 +483,7 @@ export default class Panel {
     const t = theme();
     const font = textFont();
     const gate = gateTerminal();
+    if (this.missing && !gate) return this.missingPage(t, font);
     if (this.page === "log") return this.logPage(t, font, gate);
     const waiting = pending(gate);
     const starts = autostart();
@@ -503,6 +582,7 @@ export default class Panel {
         ),
       )
       .child(this.setting(t, tr("Language", "语言"), behind ? tr("The log and approval questions follow after a restart", "日志和批准提示重新启动后切换") : "", languageBox))
+      .child(this.programRow(t))
       .child(this.heading(t, tr(`Approved devices (${devices.length})`, `已批准的设备（${devices.length}）`)))
       .child(
         div()

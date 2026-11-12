@@ -2,6 +2,7 @@
 // it runs, what it is asking, and the calls that start, stop and answer it.
 
 import { hc, exec, home, appHome, readTextFile, terminals, machines, fonts, notify, playSound, settings, shared, setShared, window as appWindow } from "herdr";
+import * as fs from "fs/promises";
 
 export const NAME = "herdr-gate";
 export const ICON = `mods/${NAME}/gate.svg`;
@@ -15,6 +16,8 @@ const LANGUAGE = `${NAME}.language`;
 // Learned from `-info`. In module scope, so every copy of the mod shares it;
 // English until the gate has answered.
 let systemLanguage = "en";
+// Whether that has been learned, from the gate program or without it.
+let languageLearned = false;
 
 /** What the person chose in the panel: "en", "zh", or "auto" for the
  *  system's language. Kept by Herdr. */
@@ -144,24 +147,145 @@ function platform() {
 // Whether the gate program has been made runnable since Herdr started.
 let runnable = false;
 
+// Where a copy of the mod without a gate program downloads one from: the
+// newest release's program for this system.
+const DOWNLOADS = "https://github.com/heromantf/herdr-gate/releases/latest/download/";
+
+/** A path as this system writes it. */
+function local(path) {
+  return platform() === "windows" ? path.replace(/\//g, "\\") : path;
+}
+
 /**
- * The gate program for this computer, beside this mod, ready to run. A copy
- * from another system arrives without its executable bit, and on macOS
- * possibly quarantined, so both are put right before its first use.
+ * The gate program for this computer: its file name, the mod's bin folder,
+ * and its place in that folder. build.go puts it there, or a download does,
+ * or the person does by hand.
  */
-async function gatePath() {
+async function program() {
   const os = { windows: "windows", macos: "darwin", linux: "linux" }[platform()];
   let machine = typeof process !== "undefined" ? process.arch : "";
   if (!machine && os !== "windows") machine = (await exec("uname", ["-m"]).catch(() => null))?.stdout.trim() ?? "";
   const arch = /arm64|aarch64/.test(machine) ? "arm64" : "amd64";
-  const path = `${appHome()}/mods/${NAME}/bin/${NAME}-${os}-${arch}`;
-  if (os === "windows") return `${path}.exe`.replace(/\//g, "\\");
-  if (!runnable) {
+  const file = `${NAME}-${os}-${arch}${os === "windows" ? ".exe" : ""}`;
+  const bin = local(`${appHome()}/mods/${NAME}/bin`);
+  return { os, file, bin, path: local(`${bin}/${file}`) };
+}
+
+/**
+ * The gate program for this computer, ready to run. A copy from another
+ * system arrives without its executable bit, and on macOS possibly
+ * quarantined, so both are put right before its first use.
+ */
+async function gatePath() {
+  const { os, path } = await program();
+  if (os !== "windows" && !runnable) {
     await exec("chmod", ["+x", path]).catch(() => null);
     if (os === "darwin") await exec("xattr", ["-d", "com.apple.quarantine", path]).catch(() => null);
     runnable = true;
   }
   return path;
+}
+
+/** Whether this copy of the mod has no gate program for this computer: one
+ *  taken from the repository comes without. */
+export async function programMissing() {
+  const { path } = await program();
+  try {
+    return !(await fs.exists(path));
+  } catch {
+    return false; // cannot tell: let running it say what is wrong
+  }
+}
+
+/**
+ * Learns the system's language without the gate program, for a copy of the
+ * mod that has none to ask yet. It looks where the gate looks (its lang_*.go):
+ * the display language on Windows, the first preferred language on macOS,
+ * the locale elsewhere. Chinese is "zh", everything else "en".
+ */
+export async function learnSystemLanguage() {
+  if (languageLearned) return;
+  const ask = async (command, args, pick) => {
+    const result = await exec(command, args, { timeout: 5000 }).catch(() => null);
+    return result && result.code === 0 ? (pick(result.stdout) ?? "") : "";
+  };
+  let locale = "";
+  if (platform() === "windows") {
+    // The display language the person chose; without one, the system's own.
+    // reg prints such a list with a backslash and a zero between its entries.
+    const first = (out) => /REG_MULTI_SZ\s+(\S+)/.exec(out)?.[1]?.split("\\0")[0];
+    locale =
+      (await ask("reg", ["query", "HKCU\\Control Panel\\Desktop", "/v", "PreferredUILanguages"], first)) ||
+      (await ask("reg", ["query", "HKCU\\Control Panel\\Desktop\\MuiCached", "/v", "MachinePreferredUILanguages"], first));
+  } else if (platform() === "macos") {
+    locale = await ask("defaults", ["read", "-g", "AppleLanguages"], (out) => /[A-Za-z]{2,3}(?:[-_][A-Za-z0-9]+)*/.exec(out)?.[0]);
+  } else {
+    locale = await ask("sh", ["-c", 'echo "${LC_ALL:-${LC_MESSAGES:-$LANG}}"'], (out) => out.trim());
+  }
+  if (!locale) return;
+  systemLanguage = /^zh([-_.]|$)/i.test(locale) ? "zh" : "en";
+  languageLearned = true;
+}
+
+/** The gate program as the panel tells of it: its file name, the folder it
+ *  belongs in, and where it lies, or null when it is not there. */
+export async function programInfo() {
+  const { file, bin, path } = await program();
+  return { file, bin, path: (await fs.exists(path).catch(() => false)) ? path : null };
+}
+
+/** A path for showing, with the home folder written as ~. */
+export function shortPath(path) {
+  const mine = local(home());
+  return path.startsWith(mine) ? `~${path.slice(mine.length)}` : path;
+}
+
+/**
+ * Downloads the gate program for this computer, the newest release's, into
+ * the mod's bin folder. Only on a click, never by itself.
+ */
+export async function downloadGate() {
+  const { os, file, bin, path } = await program();
+  runnable = false; // a new file: its executable bit and quarantine mark are seen to again
+  await fetchTo(DOWNLOADS + file, bin, path, os);
+}
+
+/**
+ * Downloads a file and puts it at `path`, in the folder `dir`.
+ *
+ * Herdr starts a mod afresh a moment after anything in the mod's folder
+ * changes, cutting short whatever the mod was doing. So the download waits
+ * outside that folder until it is whole, and then one command of the
+ * system's makes the folder if need be and moves the file in. The mod is
+ * started afresh by that, and finds the program there. (Reading the file
+ * into the script to write it out again would not do either: its bytes do
+ * not come through whole.)
+ */
+export async function fetchTo(url, dir, path, os) {
+  const part = local(`${appHome()}/${NAME}-download.part`);
+  try {
+    let got;
+    try {
+      // curl comes with Windows, macOS and nearly every Linux; fetch() here returns text only.
+      got = await exec("curl", ["--fail", "--location", "--silent", "--show-error", "--output", part, url], { timeout: 300000 });
+    } catch (e) {
+      throw new Error(tr(`curl could not be run: ${e?.message ?? e}`, `无法运行 curl：${e?.message ?? e}`));
+    }
+    if (got.code !== 0) {
+      const why = (got.stderr || got.stdout || `curl ${got.code}`).trim();
+      throw new Error(tr(`Download failed: ${why}`, `下载失败：${why}`));
+    }
+    const moved =
+      os === "windows"
+        ? await exec("cmd", ["/d", "/c", "mkdir", dir, "2>nul", "&", "move", "/y", part, path])
+        : await exec("sh", ["-c", 'mkdir -p "$1" && mv -f "$2" "$3"', "sh", dir, part, path]);
+    if (moved.code !== 0) {
+      const why = (moved.stderr || moved.stdout || "").trim();
+      throw new Error(tr(`The program could not be put in place (is herdr-gate still running?): ${why}`, `程序没能放到位（herdr-gate 还在运行吗？）：${why}`));
+    }
+  } finally {
+    await fs.unlink(part).catch(() => null);
+  }
 }
 
 function failure(result) {
@@ -188,6 +312,7 @@ export async function gateInfo() {
   // Asked without a language, so the answer names the one the gate picks by itself.
   const info = JSON.parse(await ask(["-info"]));
   systemLanguage = info.lang === "zh" ? "zh" : "en";
+  languageLearned = true;
   info.addresses = info.addresses ?? [];
   // Those of the addresses that Tailscale itself says are its own.
   info.tailscale = info.tailscale ?? [];

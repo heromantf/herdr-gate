@@ -97,13 +97,21 @@ mod 启动的 herdr-gate 不占标签页，在后台运行：herdr-app 里关掉
 - "随 Herdr 自动启动"开关；
 - "自动批准我的 Tailscale 设备"开关；
 - 语言；
+- 正在使用的 herdr-gate 程序：版本和所在位置；
 - 已批准的设备、每台是否在线，以及撤销；
 - 日志，只读。
 
 状态栏按钮在 herdr-gate 运行时是绿色，有设备连着时显示在线台数，有设备等待批准时显示提示。
 
-安装：先运行 `go run build.go`，它会把程序编译到 mod 的 `bin/` 里，再把
-`mods/herdr-gate/` 复制到 `~/.config/herdr-app/mods/herdr-gate/`。
+安装：把 `mods/herdr-gate/` 复制到 `~/.config/herdr-app/mods/herdr-gate/`。herdr-gate 程序
+放在 mod 的 `bin/` 里，三种方式任选：
+
+- 打开面板。没有程序时面板会提示，并提供"下载"，从最新的发布版本里取本机系统的那一个。
+  你不点下载，它不会联网。
+- 自己从发布页下载程序，放进 `bin/`。
+- 自己编译：`go run build.go` 会把所有系统的程序编译到 `bin/` 里，然后再复制 mod。
+
+不管是哪种方式放进去的，用的都是 `bin/` 里的程序，面板里会显示它的版本和位置。
 
 更新：先停止 herdr-gate，并先删掉旧的 `~/.config/herdr-app/mods/herdr-gate/`，再复制新的。
 在 Apple 芯片的 Mac 上，直接覆盖正在运行的程序，新程序一启动就会被系统结束，
@@ -158,6 +166,9 @@ go build .        # 只编译本机的，放在当前文件夹
 
 `build.go` 会生成 Windows、macOS 和 Linux 的 `herdr-gate-<系统>-<架构>`（Windows 加 `.exe`），
 mod 会自动选用本机对应的那个。
+
+发布：改 `main.go` 里的版本号，提交，再推送标签 `v<版本号>`。仓库的工作流会在 Linux、
+macOS、Windows 上跑测试、编译程序，然后把它们发布到这个版本下。
 
 ## 许可证
 

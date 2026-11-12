@@ -114,14 +114,24 @@ The panel shows:
 - a switch to start the gate whenever Herdr opens;
 - a switch to approve your own Tailscale devices without asking;
 - the language;
+- the gate program in use: its version and where it lies;
 - the approved devices, whether each is connected now, and Revoke;
 - the gate's log, read-only.
 
 The status-bar button is green while the gate runs, shows how many devices are connected,
 and says when one waits for approval.
 
-Install: run `go run build.go`, which puts the programs in the mod's `bin/`, then copy
-`mods/herdr-gate/` to `~/.config/herdr-app/mods/herdr-gate/`.
+Install: copy `mods/herdr-gate/` to `~/.config/herdr-app/mods/herdr-gate/`. The gate
+program belongs in the mod's `bin/`, and gets there in any of three ways:
+
+- Open the panel. Without a program it says so and offers Download, which fetches this
+  system's program from the newest release. Nothing is downloaded before you click.
+- Fetch the program from the release page yourself and put it in `bin/`.
+- Build it: `go run build.go` puts the programs for every system in `bin/` before you
+  copy the mod.
+
+Whichever way it got there, the program in `bin/` is the one that is used, and the panel
+shows its version and where it lies.
 
 To update: stop herdr-gate first, and delete the old `~/.config/herdr-app/mods/herdr-gate/`
 before copying the new one. On a Mac with Apple silicon, a program copied over the one
@@ -182,6 +192,10 @@ go build .        # this system's only, into this folder
 
 `build.go` makes `herdr-gate-<os>-<arch>` (with `.exe` on Windows) for Windows, macOS and
 Linux. The mod picks the one for the machine it runs on.
+
+To release: set the version in `main.go`, commit, and push the tag `v<version>`. The
+repository's workflow tests on Linux, macOS and Windows, builds the programs, and
+publishes them as that release.
 
 ## License
 

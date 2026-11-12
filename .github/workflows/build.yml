@@ -1,0 +1,72 @@
+name: build
+
+# Tests the gate and builds it for every system. A tag v<version> also
+# publishes the programs as that version's release, which is where a copy of
+# the mod without a program downloads its own from.
+
+on:
+  push:
+    branches: [main]
+    tags: ["v*"]
+  pull_request:
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+      - run: go run build.go
+      - uses: actions/upload-artifact@v7
+        if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+        with:
+          name: programs
+          path: mods/herdr-gate/bin/
+          if-no-files-found: error
+          retention-days: 3
+
+  # The other two systems: for a release, or when asked for by hand. Not on
+  # every push, since in a private repository their minutes count many times.
+  test:
+    if: startsWith(github.ref, 'refs/tags/v') || github.event_name == 'workflow_dispatch'
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [macos-latest, windows-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/setup-go@v7
+        with:
+          go-version-file: go.mod
+      - run: go vet ./...
+      - run: go test ./...
+
+  release:
+    if: startsWith(github.ref, 'refs/tags/v')
+    needs: [build, test]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+      - uses: actions/download-artifact@v8
+        with:
+          name: programs
+          path: programs
+      - name: The tag has to be the version the program says it is
+        run: |
+          version=$(sed -n 's/^const version = "\(.*\)"/\1/p' main.go)
+          test "$GITHUB_REF_NAME" = "v$version" || { echo "the tag is $GITHUB_REF_NAME, but main.go says $version"; exit 1; }
+      - name: Publish
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: gh release create "$GITHUB_REF_NAME" programs/* --verify-tag --title "herdr-gate ${GITHUB_REF_NAME#v}" --generate-notes
