@@ -15,10 +15,11 @@ Before adding it, the person should know that this mod:
 
 - runs programs: `hc`, the `herdr-gate` program, and on a download `curl` and the
   system's command for moving a file; on macOS and Linux also `chmod`, `uname`, and on
-  macOS `xattr`, and `scutil` on a download;
+  macOS `xattr`; on a download `scutil` on macOS and `reg` on Windows, to read the
+  system's proxy setting;
 - reaches the network only when Download is clicked, to fetch the program from the
-  repository's newest GitHub release, on macOS through the proxy the system is set to
-  use when the environment names none;
+  repository's newest GitHub release, on macOS and Windows through the proxy the system
+  is set to use when the environment names none;
 - reads `~/.config/herdr-gate/connections.json`;
 - starts an SSH server on this machine when Start is clicked: a device approved there can
   run any command as the person.
@@ -127,11 +128,15 @@ alone, 100 with a count, 150 with the sentence.
   tenth of a second later, cutting short whatever it was doing. So a download waits
   outside the mod's folder until it is whole, and one system command then moves it in.
 - A program run with `exec` gives nothing back until it ends. So curl writes its progress
-  meter to a file beside the download (`--stderr`), and the panel reads the last state of
-  the one line curl keeps rewriting there; what curl says when it fails is in that file too.
-- curl takes a proxy from its environment, not from the system's settings, and a Herdr
-  opened from the desktop has no such variables. On macOS the mod then asks
-  `scutil --proxy` and hands curl what it says (`--proxy`). Windows is not covered yet.
+  meter to a file beside the download, and the panel reads the last state of the one
+  line curl keeps rewriting there; what curl says when it fails is in that file too. On
+  Windows a file curl opens itself (`--stderr`) cannot be read by anyone until curl ends,
+  so there cmd opens it (`cmd /c curl … 2> file`). A state has nine to twelve words:
+  newer curls leave a time they do not know blank where older ones write `--:--:--`.
+- curl takes a proxy from its environment, not from the system's settings. A Herdr opened
+  from the macOS desktop has no such variables, and on Windows only someone who saved
+  them has. The mod then asks the system, `scutil --proxy` on macOS and the Internet
+  Settings in the registry on Windows, and hands curl what it finds (`--proxy`).
 - The download belongs to the open panel. Closing the panel leaves curl running to its
   end, or to the ten minutes Herdr lets a program run, but nothing then puts the file in
   place: what came stays beside the mods as `herdr-gate-download.part` until the next

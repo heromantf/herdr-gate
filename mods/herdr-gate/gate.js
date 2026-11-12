@@ -271,8 +271,11 @@ export async function fetchTo(url, dir, path, os) {
     try {
       // curl comes with Windows, macOS and nearly every Linux; fetch() here returns text only.
       // Its progress meter, and whatever else it has to say, go to a file the panel reads meanwhile.
+      // On Windows a file curl opens itself (--stderr) is closed to every reader until curl
+      // ends, so there cmd opens it and hands it to curl, which leaves it readable.
       // Ten minutes is the longest Herdr lets a program run.
-      got = await exec("curl", ["--fail", "--location", "--show-error", "--stderr", meter, ...(await proxyArgs(os)), "--output", part, url], { timeout: 600000 });
+      const args = ["--fail", "--location", "--show-error", ...(await proxyArgs(os)), "--output", part, url];
+      got = os === "windows" ? await exec("cmd", ["/d", "/c", "curl", ...args, "2>", meter], { timeout: 600000 }) : await exec("curl", [...args, "--stderr", meter], { timeout: 600000 });
     } catch (e) {
       throw new Error(tr(`curl could not be run, or took more than ten minutes: ${e?.message ?? e}`, `无法运行 curl，或者用时超过十分钟：${e?.message ?? e}`));
     }
@@ -301,7 +304,7 @@ function meterPath() {
   return local(`${appHome()}/${NAME}-download.progress`);
 }
 
-/** A number of bytes as curl's meter writes it: `51587`, `5477k`, `1330k`, `2.1M`. */
+/** A number of bytes as curl's meter writes it: `51587`, `5477k`, `896.1k`, `5.85M`. */
 function meterBytes(text) {
   const m = /^(\d+(?:\.\d+)?)([kMGT]?)$/.exec(text);
   return m ? Number(m[1]) * 1024 ** ["", "k", "M", "G", "T"].indexOf(m[2]) : 0;
@@ -320,24 +323,30 @@ function showBytes(n) {
 export async function downloadProgress() {
   const said = (await readTextFile(meterPath()).catch(() => null)) ?? "";
   // curl writes one line over and over; the file keeps every state of it.
+  // A state is: percent, total, percent, received, four columns about what is
+  // sent and the average, three times, and the speed just now. Older curls
+  // write --:--:-- for a time they do not know, newer ones leave it blank, so
+  // a state has nine to twelve words, and the speed is the last of them.
   const last = said
     .split(/[\r\n]+/)
     .map((line) => line.trim().split(/\s+/))
-    .filter((words) => words.length === 12 && /^\d+$/.test(words[0]))
+    .filter((words) => words.length >= 9 && words.length <= 12 && /^\d+$/.test(words[0]))
     .pop();
   const total = last ? meterBytes(last[1]) : 0;
   if (!total) return null; // not past the redirects yet
-  return { percent: Number(last[0]), received: showBytes(meterBytes(last[3])), total: showBytes(total), speed: `${showBytes(meterBytes(last[11]))}/s` };
+  return { percent: Number(last[0]), received: showBytes(meterBytes(last[3])), total: showBytes(total), speed: `${showBytes(meterBytes(last[last.length - 1]))}/s` };
 }
 
 /**
  * What makes curl go through the proxy this system is set to use, when
  * nothing in its environment says so already. curl takes a proxy from the
- * environment, not from the system's settings, and a Herdr opened from the
- * desktop has no such variables: the download then went out directly, on a
- * network that needs the proxy. macOS only so far.
+ * environment, not from the system's settings. A Herdr opened from the macOS
+ * desktop has no such variables, and on Windows only someone who saved them
+ * by hand has: the download then went out directly, on a network that needs
+ * the proxy.
  */
-async function proxyArgs(os) {
+export async function proxyArgs(os) {
+  if (os === "windows") return windowsProxyArgs();
   if (os !== "darwin") return [];
   const named = await exec("sh", ["-c", 'echo "$https_proxy$HTTPS_PROXY$all_proxy$ALL_PROXY"'], { timeout: 5000 }).catch(() => null);
   if (!named || named.code !== 0 || named.stdout.trim()) return [];
@@ -347,6 +356,48 @@ async function proxyArgs(os) {
     const host = value(`${kind}Proxy`), port = value(`${kind}Port`);
     if (value(`${kind}Enable`) === "1" && host && port) return ["--proxy", `${scheme}://${host.includes(":") ? `[${host}]` : host}:${port}`];
   }
+  return [];
+}
+
+/** The same on Windows, where the system's proxy is what the Internet
+ *  Settings in the registry say. */
+async function windowsProxyArgs() {
+  // `set name` prints the variables whose names begin so, in any letter
+  // case, and fails when there is none. (Echoing %name% would not do: for a
+  // variable that is not there cmd prints the %name% itself.)
+  for (const name of ["https_proxy", "all_proxy"]) {
+    const named = await exec("cmd", ["/d", "/c", "set", name], { timeout: 5000 }).catch(() => null);
+    if (!named) return []; // cannot tell: leave curl to itself
+    if (named.code === 0 && new RegExp(`^${name}=.`, "im").test(named.stdout)) return [];
+  }
+  const key = "HKCU\\Software\\Microsoft\\Windows\\CurrentVersion\\Internet Settings";
+  const value = async (name) => {
+    const said = await exec("reg", ["query", key, "/v", name], { timeout: 5000 }).catch(() => null);
+    return said && said.code === 0 ? (new RegExp(`^\\s*${name}\\s+REG_\\w+\\s+(.*?)\\s*$`, "m").exec(said.stdout)?.[1] ?? "") : "";
+  };
+  if (!/^0x0*1$/i.test(await value("ProxyEnable"))) return [];
+  return windowsProxy(await value("ProxyServer"));
+}
+
+/**
+ * curl's --proxy for what Windows keeps as ProxyServer, which is written in
+ * two ways: one proxy for everything (`host:port`), or one for each kind of
+ * address (`http=host:port;https=host:port;socks=host:port`). The download
+ * is an https address, so of the second kind the https one counts, then the
+ * socks one, which on Windows means SOCKS4.
+ */
+export function windowsProxy(server) {
+  const text = String(server ?? "").trim();
+  if (!text) return [];
+  const address = (where, scheme) => (/^[a-z][a-z0-9+.-]*:\/\//i.test(where) ? where : `${scheme}://${where}`);
+  if (!text.includes("=")) return ["--proxy", address(text, "http")];
+  const each = {};
+  for (const part of text.split(";")) {
+    const [kind, where] = part.trim().split("=");
+    if (kind && where) each[kind.trim().toLowerCase()] = where.trim();
+  }
+  if (each.https) return ["--proxy", address(each.https, "http")];
+  if (each.socks) return ["--proxy", address(each.socks, "socks4a")];
   return [];
 }
 
