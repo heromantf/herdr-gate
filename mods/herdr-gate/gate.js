@@ -333,7 +333,8 @@ export async function downloadProgress() {
     .filter((words) => words.length >= 9 && words.length <= 12 && /^\d+$/.test(words[0]))
     .pop();
   const total = last ? meterBytes(last[1]) : 0;
-  if (!total) return null; // not past the redirects yet
+  // Not past the redirects yet, or only the few bytes of a refusal: no program is that small.
+  if (total < 1024) return null;
   return { percent: Number(last[0]), received: showBytes(meterBytes(last[3])), total: showBytes(total), speed: `${showBytes(meterBytes(last[last.length - 1]))}/s` };
 }
 
